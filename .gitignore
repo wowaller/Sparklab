@@ -19,6 +19,6 @@ project/plugins/project/
 # Intellj specific
 *.iml
 .idea/
-.cache
 .classpath
+.project
 out/
