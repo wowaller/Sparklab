@@ -27,11 +27,6 @@ class HbaseReceiver[T](config: Configuration, tableName: String, scan: Scan, f: 
     }.start()
   }
 
-  def onStop() {
-    // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
-    println("In HbaseReceiver onStop()")
-  }
-
   private def receive() {
     println("In HbaseReceiver receive()")
     val hConnection = HConnectionManager.createConnection(config)
@@ -60,6 +55,11 @@ class HbaseReceiver[T](config: Configuration, tableName: String, scan: Scan, f: 
       htable.close()
       hConnection.close()
     }
+  }
+
+  def onStop() {
+    // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
+    println("In HbaseReceiver onStop()")
   }
 
 }

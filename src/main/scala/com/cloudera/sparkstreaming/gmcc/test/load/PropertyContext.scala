@@ -11,8 +11,8 @@ object PropertyContext {
   val TABLE_NAME = "tableName"
   val ENCODING = "encoding"
   val DEFAULT_ENCODING = "GBK"
-  val DELETE_ON_COMPLETE="deleteOnComplete"
-  val DEFAULT_DELETE_ON_COMPLETE="false"
+  val DELETE_ON_COMPLETE = "deleteOnComplete"
+  val DEFAULT_DELETE_ON_COMPLETE = "false"
   val CHECK_POINT = "checkPoint"
   val DEFAULT_CHECK_POINT = "hdfs:///tmp"
 }

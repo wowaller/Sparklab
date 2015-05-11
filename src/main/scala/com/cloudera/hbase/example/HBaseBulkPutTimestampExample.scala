@@ -17,19 +17,18 @@
 
 package com.cloudera.spark.hbase.example
 
-import org.apache.spark.SparkContext
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.client.Put
-import org.apache.spark.SparkConf
 import com.cloudera.spark.hbase.HBaseContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark.{SparkConf, SparkContext}
 
 object HBaseBulkPutTimestampExample {
   def main(args: Array[String]) {
     if (args.length == 0) {
       System.out.println("HBaseBulkPutTimestampExample {tableName} {columnFamily}");
-      return ;
+      return;
     }
 
     val tableName = args(0);
@@ -37,7 +36,7 @@ object HBaseBulkPutTimestampExample {
 
     val sparkConf = new SparkConf().setAppName("HBaseBulkPutTimestampExample " + tableName + " " + columnFamily)
     val sc = new SparkContext(sparkConf)
-      
+
 
     val rdd = sc.parallelize(Array(
       (Bytes.toBytes("6"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("1"), Bytes.toBytes("1")))),

@@ -1,32 +1,20 @@
 package org.apache.spark.hbase
 
-import org.apache.spark.streaming.StreamingContext
-import org.scalatest.FunSuite
-import org.apache.spark.SparkContext._
-import org.apache.spark._
 import org.apache.hadoop.hbase.HBaseTestingUtility
-import org.apache.hadoop.hbase.util.Bytes 
-import org.apache.hadoop.hbase.client.HTable
-import org.apache.hadoop.hbase.client.Scan
-import org.apache.hadoop.hbase.client.Get
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.hbase.client.HConnection
-import org.apache.hadoop.hbase.client.HConnectionManager
-import org.apache.hadoop.hbase.client.Increment
-import org.apache.hadoop.hbase.client.Delete
-import org.apache.hadoop.hbase.client.Result
+import org.apache.hadoop.hbase.client.{Delete, Get, HConnectionManager, Increment, Put, Result, Scan}
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark._
 
- 
+
 class HBaseContextSuite extends FunSuite with LocalSparkContext {
-
-  var htu: HBaseTestingUtility = null
 
   val tableName = "t1"
   val columnFamily = "c"
+  var htu: HBaseTestingUtility = null
 
   override def beforeAll() {
     htu = HBaseTestingUtility.createLocalHTU()
-    
+
     htu.cleanupTestDir()
     println("starting minicluster")
     htu.startMiniZKCluster();
@@ -97,7 +85,7 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
     assert(Bytes.toString(htable.get(new Get(Bytes.toBytes("5"))).
       getColumnLatest(Bytes.toBytes(columnFamily), Bytes.toBytes("e")).
       getValue()).equals("bar"))
-    
+
   }
 
   test("bulkIncrement to test HBase client") {
@@ -154,7 +142,7 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
     assert(Bytes.toLong(htable.get(new Get(Bytes.toBytes("5"))).
       getColumnLatest(Bytes.toBytes(columnFamily), Bytes.toBytes("counter")).
       getValue()) == 10L)
-    
+
   }
 
   test("bulkDelete to test HBase client") {
@@ -189,7 +177,7 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
     assert(Bytes.toString(htable.get(new Get(Bytes.toBytes("delete2"))).
       getColumnLatest(Bytes.toBytes(columnFamily), Bytes.toBytes("a")).
       getValue()).equals("foo2"))
-      
+
   }
 
   test("bulkGet to test HBase client") {
@@ -225,9 +213,9 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
         if (result.list() != null) {
           val it = result.list().iterator()
           val B = new StringBuilder
-  
+
           B.append(Bytes.toString(result.getRow()) + ":")
-  
+
           while (it.hasNext()) {
             val kv = it.next()
             val q = Bytes.toString(kv.getQualifier())
@@ -243,9 +231,9 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
         }
       })
 
-      
+
     val getArray = getRdd.collect
-    
+
     getArray.foreach(f => println(f));
 
     assert(getArray.length == 4)
@@ -254,7 +242,7 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
     assert(getArray.contains("get3:(a,foo3)"))
 
   }
-  
+
   test("distributedScan to test HBase client") {
     val config = htu.getConfiguration
     val connection = HConnectionManager.createConnection(config)
@@ -275,22 +263,22 @@ class HBaseContextSuite extends FunSuite with LocalSparkContext {
     put = new Put(Bytes.toBytes("scan5"))
     put.add(Bytes.toBytes(columnFamily), Bytes.toBytes("a"), Bytes.toBytes("foo3"))
     htable.put(put)
-    
-    
+
+
     sc = new SparkContext("local", "test")
     val hbaseContext = new HBaseContext(sc, config)
-    
+
     var scan = new Scan()
     scan.setCaching(100)
     scan.setStartRow(Bytes.toBytes("scan2"))
     scan.setStopRow(Bytes.toBytes("scan4_"))
-    
+
     val scanRdd = hbaseContext.hbaseRDD(tableName, scan)
-    
+
     val scanList = scanRdd.collect
-    
+
     //assert(scanList.length == 3)
-    
+
   }
 
 }

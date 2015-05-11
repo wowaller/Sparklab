@@ -1,25 +1,24 @@
 package com.cloudera.sa.example.sparkstreaming.sessionization
 
-import java.io.BufferedWriter
-import java.io.FileWriter
+import java.io.{BufferedWriter, FileWriter}
 
 object SessionDataFileWriter {
-  
-  val eol = System.getProperty("line.separator");  
-  
+
+  val eol = System.getProperty("line.separator");
+
   def main(args: Array[String]) {
     if (args.length == 0) {
-        println("SessionDataFileWriter {numberOfRecords} {outputFile} ");
-        return;
+      println("SessionDataFileWriter {numberOfRecords} {outputFile} ");
+      return;
     }
-    
+
     val writer = new BufferedWriter(new FileWriter(args(1)))
     val loops = args(0).toInt
-    
+
     for (i <- 1 to loops) {
       writer.write(SessionDataGenerator.getNextEvent + eol)
     }
-    
+
     writer.close
   }
 }

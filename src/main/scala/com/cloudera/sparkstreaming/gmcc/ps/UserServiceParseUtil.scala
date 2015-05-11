@@ -82,6 +82,7 @@ object UserServiceParseUtil {
   val SERVICE_GROUP_SDK = 34
 
   val IS_HTTP = 35
+  val SOURCE_DELIMITER = ","
 
   def HDFSFileSource(ssc: StreamingContext, inputPath: String): DStream[Array[String]] = {
     //    LOG.info("Get inputPath as: " + inputPath)
@@ -103,10 +104,8 @@ object UserServiceParseUtil {
     var min = time.substring(minIndex, minIndex + 2).toInt
     min = (min / 5) * 5
     time.substring(0, minIndex) + min
-//    if (min >= 0 && min < 5) {
-//      time.substring(0, minIndex) + "00"
-//    } else if (min < 10)
+    //    if (min >= 0 && min < 5) {
+    //      time.substring(0, minIndex) + "00"
+    //    } else if (min < 10)
   }
-
-  val SOURCE_DELIMITER = ","
 }

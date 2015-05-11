@@ -12,7 +12,7 @@ import org.apache.spark.{SparkConf, SparkContext}
  */
 object CertainNumberFilterRunner {
 
-  def main (args: Array[String]) {
+  def main(args: Array[String]) {
     val sparkConf = new SparkConf().
       setAppName("GMCC Spark Stream Test").
       set("spark.cleaner.ttl", "120000")

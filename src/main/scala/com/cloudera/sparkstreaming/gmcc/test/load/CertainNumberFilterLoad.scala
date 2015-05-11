@@ -1,7 +1,6 @@
 package com.cloudera.sparkstreaming.gmcc.test.load
 
 import java.io.Serializable
-import java.util
 import java.util.Properties
 
 import com.cloudera.gmcc.test.io.{FileRowTextInputFormat, FileRowWritable}
@@ -12,7 +11,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.io.Text
 import org.apache.spark.SparkContext
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -21,7 +20,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  * Created by bwo on 2014/12/15.
  */
 class CertainNumberFilterLoad(@transient sc: SparkContext,
-                              @transient conf: Configuration) extends Serializable{
+                              @transient conf: Configuration) extends Serializable {
   val LOG = LogFactory.getLog(classOf[CertainNumberFilterLoad])
   val PHONE_NUM_LENGTH: Int = 64
   val BPHONE_NUM_LENGTH: Int = 32
@@ -35,6 +34,15 @@ class CertainNumberFilterLoad(@transient sc: SparkContext,
   var deleteOnComplete: Boolean = false
   var hbaseContext: HBaseContext = null
   var tableName: String = null
+
+  def loadToHbase(props: Properties): StreamingContext = {
+    init(props)
+    load(deploy())
+    //    if(deleteOnComplete) {
+    //      files.foreach(f=)
+    //    }
+    ssc
+  }
 
   def init(props: Properties): StreamingContext = {
     inputPath = props.getProperty(PropertyContext.INPUT_PATH)
@@ -51,15 +59,15 @@ class CertainNumberFilterLoad(@transient sc: SparkContext,
   }
 
   def deploy(): DStream[(FileRowWritable, Text)] = {
-//    LOG.info("Get inputPath as: " + inputPath)
+    //    LOG.info("Get inputPath as: " + inputPath)
     //Simple example of how you set up a receiver from a HDFS folder
     ssc.fileStream[FileRowWritable, Text, FileRowTextInputFormat](inputPath, (t: Path) => {
       if (t.getName.endsWith("_COPYING_")) {
         false
       } else {
-//        if (deleteOnComplete) {
-//          files += t
-//        }
+        //        if (deleteOnComplete) {
+        //          files += t
+        //        }
         true
       }
     }, true).filter(line => filter(line._2.copyBytes()))
@@ -82,7 +90,7 @@ class CertainNumberFilterLoad(@transient sc: SparkContext,
         //Here we are converting our input record into a put
         //The rowKey is C for Count and a backward counting time so the newest
         //count show up first in HBase's sorted order
-//        LOG.info("Load line " + t._2.toString + " into table " + tableName)
+        //        LOG.info("Load line " + t._2.toString + " into table " + tableName)
         record.parse(t._2.copyBytes(), t._1.getFileName, t._1.getRow)
 
         // create row key
@@ -99,14 +107,5 @@ class CertainNumberFilterLoad(@transient sc: SparkContext,
         put
       },
       false)
-  }
-
-  def loadToHbase(props: Properties): StreamingContext = {
-    init(props)
-    load(deploy())
-//    if(deleteOnComplete) {
-//      files.foreach(f=)
-//    }
-    ssc
   }
 }

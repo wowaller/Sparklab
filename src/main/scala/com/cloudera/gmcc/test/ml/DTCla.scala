@@ -9,18 +9,19 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 
 object DTCla {
-  def main(args: Array[String]) { //input: String, algo: Algo, impurity: Impurity, maxDepth: Int, maxBins:Int) {
+  def main(args: Array[String]) {
+    //input: String, algo: Algo, impurity: Impurity, maxDepth: Int, maxBins:Int) {
 
-//    if (args.length != 7) {
-//      println("Parameters: (input: org.apache.spark.rdd.RDD[org.apache.spark.mllib.regression.LabeledPoint]; " +
-//        "algo: org.apache.spark.mllib.tree.configuration.Algo.Algo; " +
-//        "impurity: org.apache.spark.mllib.tree.impurity.Impurity; " +
-//        "maxDepth: Int; maxBins: Int; quantileCalculationStrategy: org.apache.spark" +
-//        ".mllib.tree.configuration.QuantileStrategy.Q
-//      //val categoricalFeaturesInfo = Map[Int, Int]()uantileStrategy; " +
-//      "categoricalFeaturesInfo: Map[Int,Int])")
-//      sys.exit(1)
-//    }
+    //    if (args.length != 7) {
+    //      println("Parameters: (input: org.apache.spark.rdd.RDD[org.apache.spark.mllib.regression.LabeledPoint]; " +
+    //        "algo: org.apache.spark.mllib.tree.configuration.Algo.Algo; " +
+    //        "impurity: org.apache.spark.mllib.tree.impurity.Impurity; " +
+    //        "maxDepth: Int; maxBins: Int; quantileCalculationStrategy: org.apache.spark" +
+    //        ".mllib.tree.configuration.QuantileStrategy.Q
+    //      //val categoricalFeaturesInfo = Map[Int, Int]()uantileStrategy; " +
+    //      "categoricalFeaturesInfo: Map[Int,Int])")
+    //      sys.exit(1)
+    //    }
 
     //input: org.apache.spark.rdd.RDD[org.apache.spark.mllib.regression.LabeledPoint];
     // algo: org.apache.spark.mllib.tree.configuration.Algo.Algo;
@@ -60,7 +61,7 @@ object DTCla {
       val parts = line.split(' ')
       LabeledPoint(parts(0).toDouble, Vectors.dense(parts.tail.map(x => x.toDouble).toArray))
     }
-//    val parsedData = MLUtils.loadLibSVMFile(sc, dataDir).cache()
+    //    val parsedData = MLUtils.loadLibSVMFile(sc, dataDir).cache()
     val splits = parsedData.randomSplit(Array(0.8, 0.2), seed = 11L)
     val training = splits(0).cache()
     val test = splits(1)
@@ -73,33 +74,33 @@ object DTCla {
     println("=============== Tree Details: ===========")
     println(model.toString)
 
-  //new DecistionTreeModel(topNode: Node, algo: Algo)
+    //new DecistionTreeModel(topNode: Node, algo: Algo)
 
 
-  //val algo: Algo     algorithm type -- classification or regression
-  //def predict(features: RDD[Vector]): RDD[Double]
+    //val algo: Algo     algorithm type -- classification or regression
+    //def predict(features: RDD[Vector]): RDD[Double]
 
-//  Predict values for the given data set using the model trained.
+    //  Predict values for the given data set using the model trained.
 
-  // Evaluate model on training examples and compute training error
-  val labelAndPreds = training.map { point =>
-    val prediction = model.predict(point.features)
-    (point.label, prediction)
+    // Evaluate model on training examples and compute training error
+    val labelAndPreds = training.map { point =>
+      val prediction = model.predict(point.features)
+      (point.label, prediction)
+    }
+    //  labelAndPreds.foreach(println)
+    val trainErr = labelAndPreds.filter(r => (r._1 - r._2).abs >= 0.5).count.toDouble / training.count
+    println("Training Error ========================== " + trainErr)
+
+    // Evaluate model on test examples and compute test error
+    //  val labelAndPreds = test.map { point =>
+    //    val prediction = model.predict(point.features)
+    //    (point.label, prediction)
+    //  }
+    //  //  labelAndPreds.foreach(println)
+    //  val testErr = labelAndPreds.filter(r => (r._1 - r._2).abs >= 0.5).count.toDouble / test.count
+    //  println("Testing Error =========================== " + testErr)
+
   }
-  //  labelAndPreds.foreach(println)
-  val trainErr = labelAndPreds.filter(r => (r._1 - r._2).abs >= 0.5).count.toDouble / training.count
-  println("Training Error ========================== " + trainErr)
-
-  // Evaluate model on test examples and compute test error
-//  val labelAndPreds = test.map { point =>
-//    val prediction = model.predict(point.features)
-//    (point.label, prediction)
-//  }
-//  //  labelAndPreds.foreach(println)
-//  val testErr = labelAndPreds.filter(r => (r._1 - r._2).abs >= 0.5).count.toDouble / test.count
-//  println("Testing Error =========================== " + testErr)
-
-}
 
 }
 

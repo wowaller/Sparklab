@@ -17,50 +17,49 @@
 
 package com.cloudera.spark.hbase.example
 
-import org.apache.spark.SparkContext
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.client.Increment
-import org.apache.spark.SparkConf
 import com.cloudera.spark.hbase.HBaseContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.Increment
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark.{SparkConf, SparkContext}
 
 object HBaseBulkIncrementExample {
   def main(args: Array[String]) {
-	  if (args.length == 0) {
-    		System.out.println("HBaseBulkIncrementExample {tableName} {columnFamily}");
-    		return;
-      }
-    	
-      val tableName = args(0);
-      val columnFamily = args(1);
-    	
-      val sparkConf = new SparkConf().setAppName("HBaseBulkIncrementExample " + tableName + " " + columnFamily)
-      val sc = new SparkContext(sparkConf)
-      
-      //[(Array[Byte], Array[(Array[Byte], Array[Byte], Long)])]
-      val rdd = sc.parallelize(Array(
-            (Bytes.toBytes("1"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 1L))),
-            (Bytes.toBytes("2"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 2L))),
-            (Bytes.toBytes("3"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 3L))),
-            (Bytes.toBytes("4"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 4L))),
-            (Bytes.toBytes("5"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 5L)))
-           )
-          );
-    	
-      val conf = HBaseConfiguration.create();
-	    conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
-	    conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
+    if (args.length == 0) {
+      System.out.println("HBaseBulkIncrementExample {tableName} {columnFamily}");
+      return;
+    }
 
-      val hbaseContext = new HBaseContext(sc, conf);
-      hbaseContext.bulkIncrement[(Array[Byte], Array[(Array[Byte], Array[Byte], Long)])](rdd,
-          tableName,
-          (incrementRecord) => {
-            val increment = new Increment(incrementRecord._1)
-            incrementRecord._2.foreach((incrementValue) => 
-              increment.addColumn(incrementValue._1, incrementValue._2, incrementValue._3))
-            increment
-          },
-          4);
-	}
+    val tableName = args(0);
+    val columnFamily = args(1);
+
+    val sparkConf = new SparkConf().setAppName("HBaseBulkIncrementExample " + tableName + " " + columnFamily)
+    val sc = new SparkContext(sparkConf)
+
+    //[(Array[Byte], Array[(Array[Byte], Array[Byte], Long)])]
+    val rdd = sc.parallelize(Array(
+      (Bytes.toBytes("1"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 1L))),
+      (Bytes.toBytes("2"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 2L))),
+      (Bytes.toBytes("3"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 3L))),
+      (Bytes.toBytes("4"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 4L))),
+      (Bytes.toBytes("5"), Array((Bytes.toBytes(columnFamily), Bytes.toBytes("counter"), 5L)))
+    )
+    );
+
+    val conf = HBaseConfiguration.create();
+    conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
+    conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
+
+    val hbaseContext = new HBaseContext(sc, conf);
+    hbaseContext.bulkIncrement[(Array[Byte], Array[(Array[Byte], Array[Byte], Long)])](rdd,
+      tableName,
+      (incrementRecord) => {
+        val increment = new Increment(incrementRecord._1)
+        incrementRecord._2.foreach((incrementValue) =>
+          increment.addColumn(incrementValue._1, incrementValue._2, incrementValue._3))
+        increment
+      },
+      4);
+  }
 }

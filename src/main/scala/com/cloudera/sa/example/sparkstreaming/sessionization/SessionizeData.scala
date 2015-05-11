@@ -1,24 +1,21 @@
 package com.cloudera.sa.example.sparkstreaming.sessionization
 
-import com.cloudera.spark.hbase.HBaseContext
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
-import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.PairDStreamFunctions
-import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.streaming.dstream.DStream
-import org.apache.hadoop.io.LongWritable
 import java.text.SimpleDateFormat
-import org.apache.hadoop.hbase.HBaseConfiguration
+import java.util.Date
+
+import com.cloudera.spark.hbase.HBaseContext
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.spark.streaming.dstream.FileInputDStream
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.{Seconds, _}
+import org.apache.spark.streaming.dstream.DStream
+
 import scala.collection.immutable.HashMap
-import java.util.Date
 
 object SessionizeData {
 
@@ -49,7 +46,7 @@ object SessionizeData {
       println("SessionizeData file {outputDir} {table} {family}  {hdfs checkpoint directory} {source file}")
       println("SessionizeData newFile {outputDir} {table} {family}  {hdfs checkpoint directory} {source file}")
       println("SessionizeData socket {outputDir} {table} {family}  {hdfs checkpoint directory} {host} {port}")
-      return ;
+      return;
     }
 
     val outputDir = args(OUTPUT_ARG)
@@ -63,19 +60,19 @@ object SessionizeData {
     val sparkConf = new SparkConf().
       setAppName("SessionizeData " + args(0)).
       set("spark.cleaner.ttl", "120000")
-    
+
     //These two lines will get us out SparkContext and our StreamingContext.  
     //These objects have all the root functionality we need to get started.
     val sc = new SparkContext(sparkConf)
     val ssc = new StreamingContext(sc, Seconds(10))
-    
+
     //Here are are loading our HBase Configuration object.  This will have 
     //all the information needed to connect to our HBase cluster.  
     //There is nothing different here from when you normally interact with HBase.
     val conf = HBaseConfiguration.create();
     conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
     conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
-    
+
     //This is a HBaseContext object.  This is a nice abstraction that will hide 
     //any complex HBase stuff from us so we can focus on our business case
     //HBaseContext is from the SparkOnHBase project which can be found at
@@ -104,7 +101,7 @@ object SessionizeData {
 
       val directory = args(FIXED_ARGS)
       println("directory:" + directory)
-      
+
       //Simple example of how you set up a receiver from a HDFS folder
       lines = ssc.fileStream[LongWritable, Text, TextInputFormat](directory, (t: Path) => true, true).map(_._2.toString)
     } else {
@@ -117,7 +114,7 @@ object SessionizeData {
         eventRecord.substring(eventRecord.indexOf('[') + 1, eventRecord.indexOf(']'))).
         getTime()
       val ipAddress = eventRecord.substring(0, eventRecord.indexOf(' '))
-      
+
       //We are return the time twice because we will use the first at the start time
       //and the second as the end time
       (ipAddress, (time, time, eventRecord))
@@ -125,47 +122,46 @@ object SessionizeData {
 
     val latestSessionInfo = ipKeyLines.
       map[(String, (Long, Long, Long))](a => {
-        //transform to (ipAddress, (time, time, counter)) 
-        (a._1, (a._2._1, a._2._2, 1))
-      }).
+      //transform to (ipAddress, (time, time, counter))
+      (a._1, (a._2._1, a._2._2, 1))
+    }).
       reduceByKey((a, b) => {
-        //transform to (ipAddress, (lowestStartTime, MaxFinishTime, sumOfCounter))
-        (Math.min(a._1, b._1), Math.max(a._2, b._2), a._3 + b._3)
-      }).
+      //transform to (ipAddress, (lowestStartTime, MaxFinishTime, sumOfCounter))
+      (Math.min(a._1, b._1), Math.max(a._2, b._2), a._3 + b._3)
+    }).
       updateStateByKey(updateStatbyOfSessions)
 
     //remove old sessions
-      val onlyActiveSessions = latestSessionInfo.filter(t => System.currentTimeMillis() - t._2._2 < SESSION_TIMEOUT)
-      val totals = onlyActiveSessions.mapPartitions[(Long, Long, Long, Long)](it =>
-      {
-        var totalSessionTime: Long = 0
-        var underAMinuteCount: Long = 0
-          var oneToTenMinuteCount: Long = 0
-          var overTenMinutesCount: Long = 0
+    val onlyActiveSessions = latestSessionInfo.filter(t => System.currentTimeMillis() - t._2._2 < SESSION_TIMEOUT)
+    val totals = onlyActiveSessions.mapPartitions[(Long, Long, Long, Long)](it => {
+      var totalSessionTime: Long = 0
+      var underAMinuteCount: Long = 0
+      var oneToTenMinuteCount: Long = 0
+      var overTenMinutesCount: Long = 0
 
-          it.foreach(a => {
-            val time = a._2._2 - a._2._1
-            totalSessionTime += time
-            if (time < 60000) underAMinuteCount += 1
-            else if (time < 600000) oneToTenMinuteCount += 1
-          else overTenMinutesCount += 1
-        })
+      it.foreach(a => {
+        val time = a._2._2 - a._2._1
+        totalSessionTime += time
+        if (time < 60000) underAMinuteCount += 1
+        else if (time < 600000) oneToTenMinuteCount += 1
+        else overTenMinutesCount += 1
+      })
 
-        Iterator((totalSessionTime, underAMinuteCount, oneToTenMinuteCount, overTenMinutesCount))
-      }, true).reduce((a, b) => {
-        //totalSessionTime, underAMinuteCount, oneToTenMinuteCount, overTenMinutesCount
+      Iterator((totalSessionTime, underAMinuteCount, oneToTenMinuteCount, overTenMinutesCount))
+    }, true).reduce((a, b) => {
+      //totalSessionTime, underAMinuteCount, oneToTenMinuteCount, overTenMinutesCount
       (a._1 + b._1, a._2 + b._2, a._3 + b._3, a._4 + b._4)
     }).map[HashMap[String, Long]](t => HashMap(
-        (TOTAL_SESSION_TIME, t._1), 
-        (UNDER_A_MINUTE_COUNT, t._2), 
-        (ONE_TO_TEN_MINUTE_COUNT, t._3), 
-        (OVER_TEN_MINUTES_COUNT, t._4)))
+      (TOTAL_SESSION_TIME, t._1),
+      (UNDER_A_MINUTE_COUNT, t._2),
+      (ONE_TO_TEN_MINUTE_COUNT, t._3),
+      (OVER_TEN_MINUTES_COUNT, t._4)))
 
     val newSessionCount = onlyActiveSessions.filter(t => {
-        //is the session newer then that last micro batch
-        //and is the boolean saying this is a new session true
-        (System.currentTimeMillis() - t._2._2 < 11000 && t._2._4)
-      }).
+      //is the session newer then that last micro batch
+      //and is the boolean saying this is a new session true
+      (System.currentTimeMillis() - t._2._2 < 11000 && t._2._4)
+    }).
       count.
       map[HashMap[String, Long]](t => HashMap((NEW_SESSION_COUNTS, t)))
 
@@ -203,15 +199,15 @@ object SessionizeData {
         //We are iterating through the HashMap to make all the columns with their counts
         t.foreach(kv => put.add(Bytes.toBytes(hFamily), Bytes.toBytes(kv._1), Bytes.toBytes(kv._2.toString)))
         put
-      }, 
+      },
       false)
 
     //Persist to HDFS 
     ipKeyLines.join(onlyActiveSessions).
       map(t => {
-        //Session root start time | Event message 
-        dateFormat.format(new Date(t._2._2._1)) + "\t" + t._2._1._3
-      }).
+      //Session root start time | Event message
+      dateFormat.format(new Date(t._2._2._1)) + "\t" + t._2._1._3
+    }).
       saveAsTextFiles(outputDir + "/session", "txt")
 
     ssc.checkpoint(checkpointDir)
@@ -224,18 +220,18 @@ object SessionizeData {
    * This function will be called for to union of keys in the Reduce DStream 
    * with the active sessions from the last micro batch with the ipAddress 
    * being the key
-   * 
+   *
    * To goal is that this produces a stateful RDD that has all the active 
    * sessions.  So we add new sessions and remove sessions that have timed 
    * out and extend sessions that are still going
    */
   def updateStatbyOfSessions(
-      //(sessionStartTime, sessionFinishTime, countOfEvents)
-      a: Seq[(Long, Long, Long)], 
-      //(sessionStartTime, sessionFinishTime, countOfEvents, isNewSession)
-      b: Option[(Long, Long, Long, Boolean)] 
-    ): Option[(Long, Long, Long, Boolean)] = { 
-    
+                              //(sessionStartTime, sessionFinishTime, countOfEvents)
+                              a: Seq[(Long, Long, Long)],
+                              //(sessionStartTime, sessionFinishTime, countOfEvents, isNewSession)
+                              b: Option[(Long, Long, Long, Boolean)]
+                              ): Option[(Long, Long, Long, Boolean)] = {
+
     //This function will return a Optional value.  
     //If we want to delete the value we can return a optional "None".  
     //This value contains four parts 
@@ -270,18 +266,18 @@ object SessionizeData {
           //If the session from the stateful DStream has not timed out 
           //then extend the session
           result = Some((
-              Math.min(c._1, b.get._1), //newStartTime 
-              Math.max(c._2, b.get._2), //newFinishTime
-              b.get._3 + c._3, //newSumOfEvents
-              false //This is not a new session
+            Math.min(c._1, b.get._1), //newStartTime
+            Math.max(c._2, b.get._2), //newFinishTime
+            b.get._3 + c._3, //newSumOfEvents
+            false //This is not a new session
             ))
         } else {
           //Otherwise remove the old session with a new one
           result = Some((
-              c._1, //newStartTime
-              c._2, //newFinishTime
-              b.get._3, //newSumOfEvents
-              true //new session
+            c._1, //newStartTime
+            c._2, //newFinishTime
+            b.get._3, //newSumOfEvents
+            true //new session
             ))
         }
       }

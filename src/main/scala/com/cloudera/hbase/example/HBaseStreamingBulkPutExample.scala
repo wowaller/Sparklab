@@ -17,15 +17,13 @@
 
 package com.cloudera.spark.hbase.example
 
-import org.apache.spark.SparkContext
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.client.Put
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.SparkConf
 import com.cloudera.spark.hbase.HBaseContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 object HBaseStreamingBulkPutExample {
   def main(args: Array[String]) {
@@ -72,7 +70,7 @@ object HBaseStreamingBulkPutExample {
       false);
 
     ssc.start();
-      
-      
+
+
   }
 }

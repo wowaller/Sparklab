@@ -1,29 +1,20 @@
 package com.cloudera.spark.hbase
 
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.hbase.SparkHadoopMapReduceUtilExtended
-import org.apache.spark.{ SparkContext, TaskContext }
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.SerializableWritable
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.Credentials
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Partition
-import org.apache.spark.InterruptibleIterator
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil
-import org.apache.hadoop.hbase.client.Scan
-import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.Logging
-import org.apache.hadoop.mapreduce.JobID
-import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapreduce.InputSplit
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.ArrayList
+import java.util.{ArrayList, Date}
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hbase.client.Scan
+import org.apache.hadoop.hbase.mapreduce.{IdentityTableMapper, TableInputFormat, TableMapReduceUtil}
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapreduce.{InputSplit, Job, JobID}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
-import org.apache.hadoop.hbase.mapreduce.IdentityTableMapper
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.hbase.SparkHadoopMapReduceUtilExtended
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
 
 class HBaseScanRDD(sc: SparkContext,
                    @transient tableName: String,
@@ -47,13 +38,11 @@ class HBaseScanRDD(sc: SparkContext,
   jobConfigurationTrans.set(TableInputFormat.INPUT_TABLE, tableName)
   val jobConfigBroadcast = sc.broadcast(new SerializableWritable(jobConfigurationTrans))
   ////
-
+  @transient protected val jobId = new JobID(jobTrackerId, id)
   private val jobTrackerId: String = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     formatter.format(new Date())
   }
-
-  @transient protected val jobId = new JobID(jobTrackerId, id)
 
   override def getPartitions: Array[Partition] = {
 
@@ -70,6 +59,15 @@ class HBaseScanRDD(sc: SparkContext,
     }
 
     result
+  }
+
+  def addCreds {
+    val creds = SparkHadoopUtil.get.getCurrentUserCredentials()
+
+    val ugi = UserGroupInformation.getCurrentUser();
+    ugi.addCredentials(creds)
+    // specify that this is a proxy user
+    ugi.setAuthenticationMethod(AuthenticationMethod.PROXY)
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(Array[Byte], java.util.List[(Array[Byte], Array[Byte], Array[Byte])])] = {
@@ -134,15 +132,6 @@ class HBaseScanRDD(sc: SparkContext,
     new InterruptibleIterator(context, iter)
   }
 
-  def addCreds {
-    val creds = SparkHadoopUtil.get.getCurrentUserCredentials()
-
-    val ugi = UserGroupInformation.getCurrentUser();
-    ugi.addCredentials(creds)
-    // specify that this is a proxy user 
-    ugi.setAuthenticationMethod(AuthenticationMethod.PROXY)
-  }
-
   private[spark] class NewHadoopPartition(
                                            rddId: Int,
                                            val index: Int,
@@ -153,4 +142,5 @@ class HBaseScanRDD(sc: SparkContext,
 
     override def hashCode(): Int = 41 * (41 + rddId) + index
   }
+
 }

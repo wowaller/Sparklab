@@ -1,9 +1,9 @@
 package com.cloudera.graph.kshell
 
-import org.apache.spark.graphx._
 import org.apache.spark._
+import org.apache.spark.graphx._
+
 import scala.math._
-import org.apache.spark.SparkContext._
 import scala.reflect.ClassTag
 
 object KCoreFast extends Logging {
@@ -20,11 +20,11 @@ object KCoreFast extends Logging {
    * @param kmax the maximum value of k to decompose the graph
    *
    * @return a graph where the vertex attribute is the minimum of
-   * kmax or the highest value k for which that vertex was a member of
-   * the k-core.
+   *         kmax or the highest value k for which that vertex was a member of
+   *         the k-core.
    *
    * @note This method has the advantage of returning not just a single kcore of the
-   * graph but will yield all the cores for all k in [1, kmax].
+   *       graph but will yield all the cores for all k in [1, kmax].
    */
 
   def run[VD: ClassTag, ED: ClassTag](
@@ -50,12 +50,12 @@ object KCoreFast extends Logging {
       oldG.unpersist()
       oldG = g
       g = computeCurrentKCore(g, curK).cache
-      vCount = g.vertices.filter{ case (vid, vd) => vd >= curK}.count()
-      eCount = g.triplets.filter{t => t.srcAttr >= curK && t.dstAttr >= curK }.count()
+      vCount = g.vertices.filter { case (vid, vd) => vd >= curK }.count()
+      eCount = g.triplets.filter { t => t.srcAttr >= curK && t.dstAttr >= curK }.count()
       logWarning(s"K=$curK, V=$vCount, E=$eCount")
       curK += 1
     }
-    (curK, g.mapVertices({ case (_, k) => k}), oldG.mapVertices({ case (_, k) => k}))
+    (curK, g.mapVertices({ case (_, k) => k }), oldG.mapVertices({ case (_, k) => k }))
   }
 
   def computeCurrentKCore[ED: ClassTag](graph: Graph[Int, ED], k: Int) = {

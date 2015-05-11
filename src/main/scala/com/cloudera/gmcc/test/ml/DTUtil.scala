@@ -8,13 +8,13 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.{Gini, Impurity}
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Created by bwo on 2014/12/24.
  */
 object DTUtil {
-  def main (args: Array[String]) {
+  def main(args: Array[String]) {
 
     if (args.length != 1) {
       println("Error: input required <properties_file>");

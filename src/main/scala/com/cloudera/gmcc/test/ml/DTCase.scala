@@ -3,11 +3,6 @@ package com.cloudera.gmcc.test.ml
 import java.io.FileInputStream
 import java.util.Properties
 
-import com.cloudera.sparkstreaming.gmcc.test.load.CertainNumberFilterLoad
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.io.{Text, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -16,7 +11,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.{Gini, Impurity}
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Created by bwo on 2014/12/22.
@@ -63,13 +58,13 @@ object DTCase {
   }
 
   def predict(parsedData: RDD[LabeledPoint], model: DecisionTreeModel) = {
-      parsedData.map { point =>
-        val prediction = model.predict(point.features)
-        (point.label, prediction)
-      }
+    parsedData.map { point =>
+      val prediction = model.predict(point.features)
+      (point.label, prediction)
+    }
   }
 
-  def main (args: Array[String]) {
+  def main(args: Array[String]) {
 
     if (args.length != 1) {
       println("Error: input required <properties_file>");
@@ -104,16 +99,16 @@ object DTCase {
 
     val maxDepth = props.getProperty(DTCaseContext.MAX_DEPTH, DTCaseContext.DEFAULT_MAX_DEPTH).toInt
     // 5
-//    val maxBins = props.getProperty(DTCaseContext.MAX_BINS, DTCaseContext.DEFAULT_MAX_BINS).toInt
+    //    val maxBins = props.getProperty(DTCaseContext.MAX_BINS, DTCaseContext.DEFAULT_MAX_BINS).toInt
     // 100 by default
     //  val quantileCS =
-//    val categoricalFI = props.getProperty(DTCaseContext.CATEGORICAL_FI)
+    //    val categoricalFI = props.getProperty(DTCaseContext.CATEGORICAL_FI)
     val trainPercent = props.getProperty(DTCaseContext.TRAINING_PRECENT, DTCaseContext.DEFAULT_TRAINING_PERCENT).toDouble
     val delimiter = props.getProperty(DTCaseContext.DELIMITER, DTCaseContext.DEFAULT_DELIMITER)
 
     // Load and parse the data file
-//    val data = sc.newAPIHadoopFile[LongWritable, Text, TextInputFormat](dataDir)//textFile(dataDir)
-//    val data = sc.textFile("hdfs://hadoop2:8020/user/hive/warehouse/formattedboss/*")
+    //    val data = sc.newAPIHadoopFile[LongWritable, Text, TextInputFormat](dataDir)//textFile(dataDir)
+    //    val data = sc.textFile("hdfs://hadoop2:8020/user/hive/warehouse/formattedboss/*")
     val data = sc.textFile(dataDir)
     val parsedData = data.map { line =>
       val parts = line.toString().split(delimiter)
@@ -160,10 +155,10 @@ object DTCase {
     println("Training Error ========================== " + trainErr)
 
     // Evaluate model on test examples and compute test error
-//    val labelAndPreds = test.map { point =>
-//      val prediction = model.predict(point.features)
-//      (point.label, prediction)
-//    }
+    //    val labelAndPreds = test.map { point =>
+    //      val prediction = model.predict(point.features)
+    //      (point.label, prediction)
+    //    }
     //  labelAndPreds.foreach(println)
     val testErr = labelAndPreds.filter(r => (r._1 - r._2).abs >= 0.5).count.toDouble / test.count
     println("Testing Error =========================== " + testErr)
@@ -171,16 +166,16 @@ object DTCase {
     //Here are are loading our HBase Configuration object.  This will have
     //all the information needed to connect to our HBase cluster.
     //There is nothing different here from when you normally interact with HBase.
-//    val conf = HBaseConfiguration.create();
-//    conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
-//    conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
-//
-//    val load = new CertainNumberFilterLoad(sc, conf)
-//    val props = new Properties()
-//    props.load(new FileInputStream(args(0)))
-//    val ssc = load.loadToHbase(props)
-//
-//    ssc.start
-//    ssc.awaitTermination
+    //    val conf = HBaseConfiguration.create();
+    //    conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
+    //    conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
+    //
+    //    val load = new CertainNumberFilterLoad(sc, conf)
+    //    val props = new Properties()
+    //    props.load(new FileInputStream(args(0)))
+    //    val ssc = load.loadToHbase(props)
+    //
+    //    ssc.start
+    //    ssc.awaitTermination
   }
 }

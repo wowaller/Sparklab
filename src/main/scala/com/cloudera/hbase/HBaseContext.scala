@@ -17,32 +17,24 @@
 
 package com.cloudera.spark.hbase
 
+import java.io._
+import java.util.ArrayList
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hbase.client.{Delete, Get, HConnection, HConnectionManager, Increment, Mutation, Put, Result, Scan}
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable
+import org.apache.hadoop.hbase.mapreduce.{IdentityTableMapper, TableInputFormat, TableMapReduceUtil}
+import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.client.HConnectionManager
-import org.apache.hadoop.hbase.client.Scan
-import org.apache.hadoop.hbase.client.Get
-import java.util.ArrayList
-import org.apache.hadoop.hbase.client.Result
-import scala.reflect.ClassTag
-import org.apache.hadoop.hbase.client.HConnection
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.hbase.client.Increment
-import org.apache.hadoop.hbase.client.Delete
-import org.apache.spark.{Logging, SerializableWritable, SparkConf, SparkContext}
-import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable
-import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.hbase.client.Mutation
 import org.apache.spark.streaming.dstream.DStream
-import java.io._
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.mapreduce.IdentityTableMapper
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.spark.{Logging, SerializableWritable, SparkContext}
+
+import scala.reflect.ClassTag
 
 
 /**
@@ -58,16 +50,16 @@ import org.apache.hadoop.fs.{Path, FileSystem}
  */
 class HBaseContext(@transient sc: SparkContext,
                    @transient config: Configuration,
-                    val tmpHdfsConfgFile: String = null) extends Serializable with Logging {
+                   val tmpHdfsConfgFile: String = null) extends Serializable with Logging {
 
 
-  @transient var credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
-  @transient var tmpHdfsConfiguration:Configuration = config
-  @transient var appliedCredentials = false;
   @transient val job = new Job(config)
-  TableMapReduceUtil.initCredentials(job)
   val broadcastedConf = sc.broadcast(new SerializableWritable(config))
   val credentialsConf = sc.broadcast(new SerializableWritable(job.getCredentials()))
+  @transient var credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
+  TableMapReduceUtil.initCredentials(job)
+  @transient var tmpHdfsConfiguration: Configuration = config
+  @transient var appliedCredentials = false;
 
   if (tmpHdfsConfgFile != null && config != null) {
     val fs = FileSystem.newInstance(config)
@@ -79,26 +71,6 @@ class HBaseContext(@transient sc: SparkContext,
     } else {
       logWarning("tmpHdfsConfigDir " + tmpHdfsConfgFile + " exist!!")
     }
-  }
-
-
-  /**
-   * A simple enrichment of the traditional Spark RDD foreachPartition.
-   * This function differs from the original in that it offers the
-   * developer access to a already connected HConnection object
-   *
-   * Note: Do not close the HConnection object.  All HConnection
-   * management is handled outside this method
-   *
-   * @param rdd  Original RDD with data to iterate over
-   * @param f    Function to be given a iterator to iterate through
-   *             the RDD values and a HConnection object to interact
-   *             with HBase
-   */
-  def foreachPartition[T](rdd: RDD[T],
-                          f: (Iterator[T], HConnection) => Unit) = {
-    rdd.foreachPartition(
-      it => hbaseForeachPartition(broadcastedConf, it, f))
   }
 
   /**
@@ -122,6 +94,25 @@ class HBaseContext(@transient sc: SparkContext,
   }
 
   /**
+   * A simple enrichment of the traditional Spark RDD foreachPartition.
+   * This function differs from the original in that it offers the
+   * developer access to a already connected HConnection object
+   *
+   * Note: Do not close the HConnection object.  All HConnection
+   * management is handled outside this method
+   *
+   * @param rdd  Original RDD with data to iterate over
+   * @param f    Function to be given a iterator to iterate through
+   *             the RDD values and a HConnection object to interact
+   *             with HBase
+   */
+  def foreachPartition[T](rdd: RDD[T],
+                          f: (Iterator[T], HConnection) => Unit) = {
+    rdd.foreachPartition(
+      it => hbaseForeachPartition(broadcastedConf, it, f))
+  }
+
+  /**
    * A simple enrichment of the traditional Spark RDD mapPartition.
    * This function differs from the original in that it offers the
    * developer access to a already connected HConnection object
@@ -130,7 +121,7 @@ class HBaseContext(@transient sc: SparkContext,
    * management is handled outside this method
    *
    * Note: Make sure to partition correctly to avoid memory issue when
-   *       getting data from HBase
+   * getting data from HBase
    *
    * @param rdd  Original RDD with data to iterate over
    * @param mp   Function to be given a iterator to iterate through
@@ -158,7 +149,7 @@ class HBaseContext(@transient sc: SparkContext,
    * management is handled outside this method
    *
    * Note: Make sure to partition correctly to avoid memory issue when
-   *       getting data from HBase
+   * getting data from HBase
    *
    * @param dstream  Original DStream with data to iterate over
    * @param mp       Function to be given a iterator to iterate through
@@ -176,7 +167,119 @@ class HBaseContext(@transient sc: SparkContext,
       mp), true)
   }
 
+  /**
+   * Under lining wrapper all mapPartition functions in HBaseContext
+   *
+   */
+  private def hbaseMapPartition[K, U](
+                                       configBroadcast: Broadcast[SerializableWritable[Configuration]],
+                                       it: Iterator[K],
+                                       mp: (Iterator[K], HConnection) => Iterator[U]): Iterator[U] = {
 
+    val config = getConf(configBroadcast)
+    applyCreds(configBroadcast)
+    val hConnection = HConnectionManager.createConnection(config)
+
+    val res = mp(it, hConnection)
+    hConnection.close()
+    res
+
+  }
+
+  def applyCreds[T](configBroadcast: Broadcast[SerializableWritable[Configuration]]) {
+
+    /*
+    val jobConf = getConf(configBroadcast)
+    if (System.getenv("HADOOP_TOKEN_FILE_LOCATION") != null)
+      jobConf.set("mapreduce.job.credentials.binary", System.getenv("HADOOP_TOKEN_FILE_LOCATION"))
+*/
+
+    credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
+
+    logInfo("appliedCredentials:" + appliedCredentials + ",credentials:" + credentials);
+
+    if (appliedCredentials == false && credentials != null) {
+      appliedCredentials = true
+      logCredInformation(credentials)
+
+      @transient val ugi = UserGroupInformation.getCurrentUser();
+
+      ugi.addCredentials(credentials)
+      // specify that this is a proxy user
+      ugi.setAuthenticationMethod(AuthenticationMethod.PROXY)
+
+      ugi.addCredentials(credentialsConf.value.value)
+    }
+
+  }
+
+  def logCredInformation[T](credentials2: Credentials) {
+    logInfo("credentials:" + credentials2);
+    for (a <- 0 until credentials2.getAllSecretKeys.size()) {
+      logInfo("getAllSecretKeys:" + a + ":" + credentials2.getAllSecretKeys.get(a));
+    }
+    val it = credentials2.getAllTokens.iterator();
+    while (it.hasNext) {
+      logInfo("getAllTokens:" + it.next());
+    }
+  }
+
+  private def getConf(configBroadcast: Broadcast[SerializableWritable[Configuration]]): Configuration = {
+
+    if (tmpHdfsConfiguration != null) {
+      tmpHdfsConfiguration
+    } else if (tmpHdfsConfgFile != null) {
+
+      val fs = FileSystem.newInstance(SparkHadoopUtil.get.conf)
+
+
+
+      val inputStream = fs.open(new Path(tmpHdfsConfgFile))
+      tmpHdfsConfiguration = new Configuration(false)
+      tmpHdfsConfiguration.readFields(inputStream)
+      inputStream.close()
+
+      tmpHdfsConfiguration
+    }
+
+    if (tmpHdfsConfiguration == null) {
+      try {
+        tmpHdfsConfiguration = configBroadcast.value.value
+        tmpHdfsConfiguration
+      } catch {
+        case ex: Exception => {
+          println("Unable to getConfig from broadcast")
+        }
+      }
+    }
+
+
+    tmpHdfsConfiguration
+  }
+
+  /**
+   * A simple abstraction over the HBaseContext.streamMapPartition method.
+   *
+   * It allow addition support for a user to take a DStream and
+   * generate puts and send them to HBase.
+   *
+   * The complexity of managing the HConnection is
+   * removed from the developer
+   *
+   * @param dstream    Original DStream with data to iterate over
+   * @param tableName  The name of the table to put into
+   * @param f          Function to convert a value in
+   *                   the DStream to a HBase Put
+   * @param autoFlush        If autoFlush should be turned on
+   */
+  def streamBulkPut[T](dstream: DStream[T],
+                       tableName: String,
+                       f: (T) => Put,
+                       autoFlush: Boolean) = {
+    dstream.foreach((rdd, time) => {
+      bulkPut(rdd, tableName, f, autoFlush)
+    })
+  }
 
   /**
    * A simple abstraction over the HBaseContext.foreachPartition method.
@@ -206,65 +309,24 @@ class HBaseContext(@transient sc: SparkContext,
         }))
   }
 
-  def applyCreds[T] (configBroadcast: Broadcast[SerializableWritable[Configuration]]){
-
-    /*
-    val jobConf = getConf(configBroadcast)
-    if (System.getenv("HADOOP_TOKEN_FILE_LOCATION") != null)
-      jobConf.set("mapreduce.job.credentials.binary", System.getenv("HADOOP_TOKEN_FILE_LOCATION"))
-*/
-
-    credentials = SparkHadoopUtil.get.getCurrentUserCredentials()
-
-    logInfo("appliedCredentials:" + appliedCredentials + ",credentials:" + credentials);
-
-    if (appliedCredentials == false && credentials != null) {
-      appliedCredentials = true
-      logCredInformation(credentials)
-
-      @transient val ugi = UserGroupInformation.getCurrentUser();
-
-      ugi.addCredentials(credentials)
-      // specify that this is a proxy user
-      ugi.setAuthenticationMethod(AuthenticationMethod.PROXY)
-
-      ugi.addCredentials(credentialsConf.value.value)
-    }
-
-  }
-
-  def logCredInformation[T] (credentials2:Credentials) {
-    logInfo("credentials:" + credentials2);
-    for (a <- 0 until credentials2.getAllSecretKeys.size()) {
-      logInfo("getAllSecretKeys:" + a + ":" + credentials2.getAllSecretKeys.get(a));
-    }
-    val it = credentials2.getAllTokens.iterator();
-    while (it.hasNext) {
-      logInfo("getAllTokens:" + it.next());
-    }
-  }
-
   /**
    * A simple abstraction over the HBaseContext.streamMapPartition method.
    *
    * It allow addition support for a user to take a DStream and
-   * generate puts and send them to HBase.
+   * generate checkAndPuts and send them to HBase.
    *
    * The complexity of managing the HConnection is
    * removed from the developer
    *
    * @param dstream    Original DStream with data to iterate over
-   * @param tableName  The name of the table to put into
-   * @param f          Function to convert a value in
-   *                   the DStream to a HBase Put
+   * @param tableName  The name of the table to checkAndPut into
+   * @param f          function to convert a value in the RDD to
+   *                   a HBase checkAndPut
    * @param autoFlush        If autoFlush should be turned on
    */
-  def streamBulkPut[T](dstream: DStream[T],
-                       tableName: String,
-                       f: (T) => Put,
-                       autoFlush: Boolean) = {
+  def streamBulkCheckAndPut[T](dstream: DStream[T], tableName: String, f: (T) => (Array[Byte], Array[Byte], Array[Byte], Array[Byte], Put), autoFlush: Boolean) {
     dstream.foreach((rdd, time) => {
-      bulkPut(rdd, tableName, f, autoFlush)
+      bulkCheckAndPut(rdd, tableName, f, autoFlush)
     })
   }
 
@@ -303,27 +365,6 @@ class HBaseContext(@transient sc: SparkContext,
   }
 
   /**
-   * A simple abstraction over the HBaseContext.streamMapPartition method.
-   *
-   * It allow addition support for a user to take a DStream and
-   * generate checkAndPuts and send them to HBase.
-   *
-   * The complexity of managing the HConnection is
-   * removed from the developer
-   *
-   * @param dstream    Original DStream with data to iterate over
-   * @param tableName  The name of the table to checkAndPut into
-   * @param f          function to convert a value in the RDD to
-   *                   a HBase checkAndPut
-   * @param autoFlush        If autoFlush should be turned on
-   */
-  def streamBulkCheckAndPut[T](dstream: DStream[T], tableName: String, f: (T) => (Array[Byte], Array[Byte], Array[Byte], Array[Byte], Put), autoFlush: Boolean) {
-    dstream.foreach((rdd, time) => {
-      bulkCheckAndPut(rdd, tableName, f, autoFlush)
-    })
-  }
-
-  /**
    * A simple abstraction over the HBaseContext.foreachPartition method.
    *
    * It allow addition support for a user to take a RDD and
@@ -357,37 +398,6 @@ class HBaseContext(@transient sc: SparkContext,
    */
   def bulkDelete[T](rdd: RDD[T], tableName: String, f: (T) => Delete, batchSize: Integer) {
     bulkMutation(rdd, tableName, f, batchSize)
-  }
-
-  /**
-   * A simple abstraction over the HBaseContext.foreachPartition method.
-   *
-   * It allow addition support for a user to take a RDD and generate
-   * checkAndDelete and send them to HBase.  The complexity of managing the
-   * HConnection is removed from the developer
-   *
-   * @param rdd       Original RDD with data to iterate over
-   * @param tableName The name of the table to delete from
-   * @param f         Function to convert a value in the RDD to a
-   *                  HBase Deletes
-   */
-  def bulkCheckDelete[T](rdd: RDD[T],
-                         tableName: String,
-                         f: (T) => (Array[Byte], Array[Byte], Array[Byte], Array[Byte], Delete)) {
-    rdd.foreachPartition(
-      it => hbaseForeachPartition[T](
-        broadcastedConf,
-        it,
-        (iterator, hConnection) => {
-          val htable = hConnection.getTable(tableName)
-
-          iterator.foreach(T => {
-            val checkDelete = f(T)
-            htable.checkAndDelete(checkDelete._1, checkDelete._2, checkDelete._3, checkDelete._4, checkDelete._5)
-          })
-          htable.flushCommits()
-          htable.close()
-        }))
   }
 
   /**
@@ -435,31 +445,23 @@ class HBaseContext(@transient sc: SparkContext,
   }
 
   /**
-   * A simple abstraction over the bulkCheckDelete method.
+   * Under lining function to support all bulk streaming mutations
    *
-   * It allow addition support for a user to take a DStream and
-   * generate CheckAndDelete and send them to HBase.
-   *
-   * The complexity of managing the HConnection is
-   * removed from the developer
-   *
-   * @param dstream    Original DStream with data to iterate over
-   * @param tableName  The name of the table to delete from
-   * @param f          function to convert a value in the DStream to a
-   *                   HBase Delete
+   * May be opened up if requested
    */
-  def streamBulkCheckAndDelete[T](dstream: DStream[T],
-                                  tableName: String,
-                                  f: (T) => (Array[Byte], Array[Byte], Array[Byte], Array[Byte], Delete)) {
+  private def streamBulkMutation[T](dstream: DStream[T],
+                                    tableName: String,
+                                    f: (T) => Mutation,
+                                    batchSize: Integer) = {
     dstream.foreach((rdd, time) => {
-      bulkCheckDelete(rdd, tableName, f)
+      bulkMutation(rdd, tableName, f, batchSize)
     })
   }
 
   /**
-   *  Under lining function to support all bulk mutations
+   * Under lining function to support all bulk mutations
    *
-   *  May be opened up if requested
+   * May be opened up if requested
    */
   private def bulkMutation[T](rdd: RDD[T], tableName: String, f: (T) => Mutation, batchSize: Integer) {
     rdd.foreachPartition(
@@ -485,17 +487,76 @@ class HBaseContext(@transient sc: SparkContext,
   }
 
   /**
-   *  Under lining function to support all bulk streaming mutations
+   * A simple abstraction over the bulkCheckDelete method.
    *
-   *  May be opened up if requested
+   * It allow addition support for a user to take a DStream and
+   * generate CheckAndDelete and send them to HBase.
+   *
+   * The complexity of managing the HConnection is
+   * removed from the developer
+   *
+   * @param dstream    Original DStream with data to iterate over
+   * @param tableName  The name of the table to delete from
+   * @param f          function to convert a value in the DStream to a
+   *                   HBase Delete
    */
-  private def streamBulkMutation[T](dstream: DStream[T],
-                                    tableName: String,
-                                    f: (T) => Mutation,
-                                    batchSize: Integer) = {
+  def streamBulkCheckAndDelete[T](dstream: DStream[T],
+                                  tableName: String,
+                                  f: (T) => (Array[Byte], Array[Byte], Array[Byte], Array[Byte], Delete)) {
     dstream.foreach((rdd, time) => {
-      bulkMutation(rdd, tableName, f, batchSize)
+      bulkCheckDelete(rdd, tableName, f)
     })
+  }
+
+  /**
+   * A simple abstraction over the HBaseContext.foreachPartition method.
+   *
+   * It allow addition support for a user to take a RDD and generate
+   * checkAndDelete and send them to HBase.  The complexity of managing the
+   * HConnection is removed from the developer
+   *
+   * @param rdd       Original RDD with data to iterate over
+   * @param tableName The name of the table to delete from
+   * @param f         Function to convert a value in the RDD to a
+   *                  HBase Deletes
+   */
+  def bulkCheckDelete[T](rdd: RDD[T],
+                         tableName: String,
+                         f: (T) => (Array[Byte], Array[Byte], Array[Byte], Array[Byte], Delete)) {
+    rdd.foreachPartition(
+      it => hbaseForeachPartition[T](
+        broadcastedConf,
+        it,
+        (iterator, hConnection) => {
+          val htable = hConnection.getTable(tableName)
+
+          iterator.foreach(T => {
+            val checkDelete = f(T)
+            htable.checkAndDelete(checkDelete._1, checkDelete._2, checkDelete._3, checkDelete._4, checkDelete._5)
+          })
+          htable.flushCommits()
+          htable.close()
+        }))
+  }
+
+  /**
+   * Under lining wrapper all foreach functions in HBaseContext
+   *
+   */
+  private def hbaseForeachPartition[T](
+                                        configBroadcast: Broadcast[SerializableWritable[Configuration]],
+                                        it: Iterator[T],
+                                        f: (Iterator[T], HConnection) => Unit) = {
+
+    val config = getConf(configBroadcast)
+
+
+    applyCreds(configBroadcast)
+    // specify that this is a proxy user
+    val hConnection = HConnectionManager.createConnection(config)
+    f(it, hConnection)
+    hConnection.close()
+
   }
 
   /**
@@ -509,9 +570,9 @@ class HBaseContext(@transient sc: SparkContext,
    * @param makeGet    function to convert a value in the RDD to a
    *                   HBase Get
    * @param convertResult This will convert the HBase Result object to
-   *                   what ever the user wants to put in the resulting
-   *                   RDD
-   * return            new RDD that is created by the Get to HBase
+   *                      what ever the user wants to put in the resulting
+   *                      RDD
+   *                      return            new RDD that is created by the Get to HBase
    */
   def bulkGet[T, U](tableName: String,
                     batchSize: Integer,
@@ -532,6 +593,20 @@ class HBaseContext(@transient sc: SparkContext,
   }
 
   /**
+   * Produces a ClassTag[T], which is actually just a casted ClassTag[AnyRef].
+   *
+   * This method is used to keep ClassTags out of the external Java API, as the Java compiler
+   * cannot produce them automatically. While this ClassTag-faking does please the compiler,
+   * it can cause problems at runtime if the Scala API relies on ClassTags for correctness.
+   *
+   * Often, though, a ClassTag[AnyRef] will not lead to incorrect behavior, just worse performance
+   * or security issues. For instance, an Array[AnyRef] can hold any type T, but may lose primitive
+   * specialization.
+   */
+  private[spark]
+  def fakeClassTag[T]: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
+
+  /**
    * A simple abstraction over the HBaseContext.streamMap method.
    *
    * It allow addition support for a user to take a DStream and
@@ -545,7 +620,7 @@ class HBaseContext(@transient sc: SparkContext,
    * @param convertResult This will convert the HBase Result object to
    *                      what ever the user wants to put in the resulting
    *                      DStream
-   * return            new DStream that is created by the Get to HBase
+   *                      return            new DStream that is created by the Get to HBase
    */
   def streamBulkGet[T, U: ClassTag](tableName: String,
                                     batchSize: Integer,
@@ -565,36 +640,12 @@ class HBaseContext(@transient sc: SparkContext,
   }
 
   /**
-   * This function will use the native HBase TableInputFormat with the
-   * given scan object to generate a new RDD
-   *
-   *  @param tableName the name of the table to scan
-   *  @param scan      the HBase scan object to use to read data from HBase
-   *  @param f         function to convert a Result object from HBase into
-   *                   what the user wants in the final generated RDD
-   *  @return          new RDD with results from scan
-   */
-  def hbaseRDD[U: ClassTag](tableName: String, scan: Scan, f: ((ImmutableBytesWritable, Result)) => U): RDD[U] = {
-
-    var job: Job = new Job(getConf(broadcastedConf))
-
-    TableMapReduceUtil.initCredentials(job)
-    TableMapReduceUtil.initTableMapperJob(tableName, scan, classOf[IdentityTableMapper], null, null, job)
-
-    sc.newAPIHadoopRDD(job.getConfiguration(),
-      classOf[TableInputFormat],
-      classOf[ImmutableBytesWritable],
-      classOf[Result]).map(f)
-  }
-
-
-  /**
    * A overloaded version of HBaseContext hbaseRDD that predefines the
    * type of the outputing RDD
    *
-   *  @param tableName the name of the table to scan
-   *  @param scans      the HBase scan object to use to read data from HBase
-   *  @return New RDD with results from scan
+   * @param tableName the name of the table to scan
+   * @param scans      the HBase scan object to use to read data from HBase
+   * @return New RDD with results from scan
    *
    */
   def hbaseRDD(tableName: String, scans: Scan):
@@ -616,6 +667,29 @@ class HBaseContext(@transient sc: SparkContext,
       })
   }
 
+  /**
+   * This function will use the native HBase TableInputFormat with the
+   * given scan object to generate a new RDD
+   *
+   * @param tableName the name of the table to scan
+   * @param scan      the HBase scan object to use to read data from HBase
+   * @param f         function to convert a Result object from HBase into
+   *                  what the user wants in the final generated RDD
+   * @return          new RDD with results from scan
+   */
+  def hbaseRDD[U: ClassTag](tableName: String, scan: Scan, f: ((ImmutableBytesWritable, Result)) => U): RDD[U] = {
+
+    var job: Job = new Job(getConf(broadcastedConf))
+
+    TableMapReduceUtil.initCredentials(job)
+    TableMapReduceUtil.initTableMapperJob(tableName, scan, classOf[IdentityTableMapper], null, null, job)
+
+    sc.newAPIHadoopRDD(job.getConfiguration(),
+      classOf[TableInputFormat],
+      classOf[ImmutableBytesWritable],
+      classOf[Result]).map(f)
+  }
+
   def hbaseScanRDD(tableName: String, scan: Scan):
   RDD[(Array[Byte], java.util.List[(Array[Byte], Array[Byte], Array[Byte])])] = {
 
@@ -623,84 +697,8 @@ class HBaseContext(@transient sc: SparkContext,
       broadcastedConf)
   }
 
-
   /**
-   *  Under lining wrapper all foreach functions in HBaseContext
-   *
-   */
-  private def hbaseForeachPartition[T](
-                                        configBroadcast: Broadcast[SerializableWritable[Configuration]],
-                                        it: Iterator[T],
-                                        f: (Iterator[T], HConnection) => Unit) = {
-
-    val config = getConf(configBroadcast)
-
-
-    applyCreds(configBroadcast)
-    // specify that this is a proxy user
-    val hConnection = HConnectionManager.createConnection(config)
-    f(it, hConnection)
-    hConnection.close()
-
-  }
-
-
-
-  private def getConf(configBroadcast: Broadcast[SerializableWritable[Configuration]]): Configuration = {
-
-    if (tmpHdfsConfiguration != null) {
-      tmpHdfsConfiguration
-    } else if (tmpHdfsConfgFile != null) {
-
-      val fs = FileSystem.newInstance(SparkHadoopUtil.get.conf)
-
-
-
-      val inputStream = fs.open(new Path(tmpHdfsConfgFile))
-      tmpHdfsConfiguration = new Configuration(false)
-      tmpHdfsConfiguration.readFields(inputStream)
-      inputStream.close()
-
-      tmpHdfsConfiguration
-    }
-
-    if (tmpHdfsConfiguration == null) {
-      try {
-        tmpHdfsConfiguration = configBroadcast.value.value
-        tmpHdfsConfiguration
-      } catch {
-        case ex: Exception =>{
-          println("Unable to getConfig from broadcast")
-        }
-      }
-    }
-
-
-    tmpHdfsConfiguration
-  }
-
-  /**
-   *  Under lining wrapper all mapPartition functions in HBaseContext
-   *
-   */
-  private def hbaseMapPartition[K, U](
-                                       configBroadcast: Broadcast[SerializableWritable[Configuration]],
-                                       it: Iterator[K],
-                                       mp: (Iterator[K], HConnection) => Iterator[U]): Iterator[U] = {
-
-    val config = getConf(configBroadcast)
-    applyCreds(configBroadcast)
-    val hConnection = HConnectionManager.createConnection(config)
-
-    val res = mp(it, hConnection)
-    hConnection.close()
-    res
-
-  }
-
-
-  /**
-   *  Under lining wrapper all get mapPartition functions in HBaseContext
+   * Under lining wrapper all get mapPartition functions in HBaseContext
    */
   private class GetMapPartition[T, U](tableName: String,
                                       batchSize: Integer,
@@ -731,20 +729,4 @@ class HBaseContext(@transient sc: SparkContext,
       res.iterator
     }
   }
-
-
-
-/**
-   * Produces a ClassTag[T], which is actually just a casted ClassTag[AnyRef].
-   *
-   * This method is used to keep ClassTags out of the external Java API, as the Java compiler
-   * cannot produce them automatically. While this ClassTag-faking does please the compiler,
-   * it can cause problems at runtime if the Scala API relies on ClassTags for correctness.
-   *
-   * Often, though, a ClassTag[AnyRef] will not lead to incorrect behavior, just worse performance
-   * or security issues. For instance, an Array[AnyRef] can hold any type T, but may lose primitive
-   * specialization.
-   */
-  private[spark]
-  def fakeClassTag[T]: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
 }

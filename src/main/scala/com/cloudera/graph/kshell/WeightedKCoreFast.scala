@@ -2,8 +2,6 @@ package com.cloudera.graph.kshell
 
 import org.apache.spark._
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.GraphGenerators
-import org.apache.spark.storage.StorageLevel
 
 import scala.math._
 import scala.reflect.ClassTag
@@ -21,11 +19,11 @@ object WeightedKCoreFast extends Logging {
    * @param kmax the maximum value of k to decompose the graph
    *
    * @return a graph where the vertex attribute is the minimum of
-   * kmax or the highest value k for which that vertex was a member of
-   * the k-core.
+   *         kmax or the highest value k for which that vertex was a member of
+   *         the k-core.
    *
    * @note This method has the advantage of returning not just a single kcore of the
-   * graph but will yield all the cores for all k in [1, kmax].
+   *       graph but will yield all the cores for all k in [1, kmax].
    */
 
   def run[VD: ClassTag](graph: Graph[VD, Int],
@@ -53,12 +51,12 @@ object WeightedKCoreFast extends Logging {
       oldG.unpersist()
       oldG = weightedG
       weightedG = computeCurrentKCore(weightedG, kSquare).cache
-      vCount = weightedG.vertices.filter{ case (vid, vd) => vd._2 >= kSquare}.count()
-      eCount = weightedG.triplets.filter{t => t.srcAttr._2 >= kSquare && t.dstAttr._2 >= kSquare }.count()
+      vCount = weightedG.vertices.filter { case (vid, vd) => vd._2 >= kSquare }.count()
+      eCount = weightedG.triplets.filter { t => t.srcAttr._2 >= kSquare && t.dstAttr._2 >= kSquare }.count()
       logWarning(s"K=$curK, V=$vCount, E=$eCount")
       curK += 1
     }
-    (curK, weightedG.mapVertices({ case (_, k) => k._2}), oldG.mapVertices({ case (_, k) => k._2}))
+    (curK, weightedG.mapVertices({ case (_, k) => k._2 }), oldG.mapVertices({ case (_, k) => k._2 }))
   }
 
   def computeWeightedDegree(graph: Graph[Int, Int]) = {
@@ -79,11 +77,11 @@ object WeightedKCoreFast extends Logging {
 
     // Note that initial message should have no effect
     Pregel(graph, 0, 1)(vProg, sendMsg, mergeMsg)
-//    graph.pregel(0, 1)(vProg, sendMsg, mergeMsg)
+    //    graph.pregel(0, 1)(vProg, sendMsg, mergeMsg)
   }
 
-  def computeCurrentKCore(graph: Graph[(Int, Int), Int], k: Int) : Graph[(Int, Int), Int] = {
-//    val kSquare = k * k
+  def computeCurrentKCore(graph: Graph[(Int, Int), Int], k: Int): Graph[(Int, Int), Int] = {
+    //    val kSquare = k * k
     logWarning(s"Computing kcore for k=$k")
     def sendMsg(et: EdgeTriplet[(Int, Int), Int]): Iterator[(VertexId, (Int, Int))] = {
       if (et.srcAttr._2 < 0 || et.dstAttr._2 < 0) {

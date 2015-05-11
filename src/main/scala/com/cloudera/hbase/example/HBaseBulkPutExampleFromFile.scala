@@ -17,55 +17,53 @@
 
 package com.cloudera.spark.hbase.example
 
-import org.apache.spark.SparkContext
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.io.Text
-import org.apache.spark.SparkConf
 import com.cloudera.spark.hbase.HBaseContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.spark.{SparkConf, SparkContext}
 
 object HBaseBulkPutExampleFromFile {
   def main(args: Array[String]) {
-	  if (args.length == 0) {
-    		System.out.println("HBaseBulkPutExampleFromFile {tableName} {columnFamily} {inputFile}");
-    		return;
-      }
-    	
-      val tableName = args(0)
-      val columnFamily = args(1)
-      val inputFile = args(2)
-    	
-      val sparkConf = new SparkConf().setAppName("HBaseBulkPutExampleFromFile " + 
-          tableName + " " + columnFamily + " " + inputFile)
-      val sc = new SparkContext(sparkConf)
-      
-      var rdd = sc.hadoopFile(
-          inputFile, 
-          classOf[TextInputFormat], 
-          classOf[LongWritable], 
-          classOf[Text]).map(v => {
-            System.out.println("reading-" + v._2.toString())
-            v._2.toString()
-          })
+    if (args.length == 0) {
+      System.out.println("HBaseBulkPutExampleFromFile {tableName} {columnFamily} {inputFile}");
+      return;
+    }
 
-      val conf = HBaseConfiguration.create();
-	    conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
-	    conf.addResource(new Path("/etc/hbase/conf/hdfs-site.xml"));
-	    conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
+    val tableName = args(0)
+    val columnFamily = args(1)
+    val inputFile = args(2)
+
+    val sparkConf = new SparkConf().setAppName("HBaseBulkPutExampleFromFile " +
+      tableName + " " + columnFamily + " " + inputFile)
+    val sc = new SparkContext(sparkConf)
+
+    var rdd = sc.hadoopFile(
+      inputFile,
+      classOf[TextInputFormat],
+      classOf[LongWritable],
+      classOf[Text]).map(v => {
+      System.out.println("reading-" + v._2.toString())
+      v._2.toString()
+    })
+
+    val conf = HBaseConfiguration.create();
+    conf.addResource(new Path("/etc/hbase/conf/core-site.xml"));
+    conf.addResource(new Path("/etc/hbase/conf/hdfs-site.xml"));
+    conf.addResource(new Path("/etc/hbase/conf/hbase-site.xml"));
 
     val hbaseContext = new HBaseContext(sc, conf);
-      hbaseContext.bulkPut[String](rdd,
-          tableName,
-          (putRecord) => {
-            System.out.println("hbase-" + putRecord)
-            val put = new Put(Bytes.toBytes("Value- " + putRecord))
-            put.add(Bytes.toBytes("c"), Bytes.toBytes("1"), Bytes.toBytes(putRecord.length()))
-            put
-          },
-          true);
-	}
+    hbaseContext.bulkPut[String](rdd,
+      tableName,
+      (putRecord) => {
+        System.out.println("hbase-" + putRecord)
+        val put = new Put(Bytes.toBytes("Value- " + putRecord))
+        put.add(Bytes.toBytes("c"), Bytes.toBytes("1"), Bytes.toBytes(putRecord.length()))
+        put
+      },
+      true);
+  }
 }

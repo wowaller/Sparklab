@@ -17,28 +17,24 @@
 
 package com.cloudera.spark.hbase.example
 
-import org.apache.spark.SparkContext
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.client.Get
-import org.apache.hadoop.hbase.client.Result
-import org.apache.hadoop.hbase.client.Scan
-import java.util.ArrayList
-import org.apache.spark.SparkConf
 import com.cloudera.spark.hbase.HBaseContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client.Scan
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark.{SparkConf, SparkContext}
 
 
 object HBaseScanRDDExample {
   def main(args: Array[String]) {
     if (args.length == 0) {
       System.out.println("GenerateGraphs {tableName}")
-      return ;
+      return;
     }
 
     val tableName = args(0);
 
-    val sparkConf = new SparkConf().setAppName("HBaseDistributedScanExample " + tableName )
+    val sparkConf = new SparkConf().setAppName("HBaseDistributedScanExample " + tableName)
     val sc = new SparkContext(sparkConf)
 
     val conf = HBaseConfiguration.create()
@@ -50,12 +46,12 @@ object HBaseScanRDDExample {
 
     val hbaseContext = new HBaseContext(sc, conf);
 
-    var getRdd = hbaseContext.hbaseScanRDD( tableName, scan)
+    var getRdd = hbaseContext.hbaseScanRDD(tableName, scan)
     println(" --- abc")
     getRdd.foreach(v => println(Bytes.toString(v._1)))
     println(" --- def")
     getRdd.collect.foreach(v => println(Bytes.toString(v._1)))
     println(" --- qwe")
-    
+
   }
 }

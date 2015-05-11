@@ -3,16 +3,15 @@ package com.cloudera.sparkstreaming.gmcc.ps
 import java.io.FileInputStream
 import java.util.Properties
 
-import com.cloudera.sparkstreaming.gmcc.test.load.CertainNumberFilterLoad
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Created by waller on 3/19/15.
  */
 object PsAggregationRunner {
-  def main (args: Array[String]) {
+  def main(args: Array[String]) {
     val sparkConf = new SparkConf().
       setAppName("GMCC Spark Stream Test").
       set("spark.cleaner.ttl", "120000")

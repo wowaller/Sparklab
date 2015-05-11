@@ -60,5 +60,5 @@ object HBaseBulkPutHdfsTmpExample {
         put
       },
       true);
-	}
+  }
 }
