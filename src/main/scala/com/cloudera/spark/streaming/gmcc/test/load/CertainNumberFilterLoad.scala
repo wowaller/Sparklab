@@ -1,4 +1,4 @@
-package com.cloudera.sparkstreaming.gmcc.test.load
+package com.cloudera.spark.streaming.gmcc.test.load
 
 import java.io.Serializable
 import java.util.Properties

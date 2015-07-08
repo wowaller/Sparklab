@@ -1,4 +1,4 @@
-package com.cloudera.sparkstreaming.gmcc.ps
+package com.cloudera.spark.streaming.gmcc.ps
 
 import com.cloudera.gmcc.test.io.{FileRowTextInputFormat, FileRowWritable}
 import org.apache.hadoop.fs.Path

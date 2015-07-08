@@ -1,4 +1,4 @@
-package com.cloudera.sparkstreaming.gmcc.test.load
+package com.cloudera.spark.streaming.gmcc.test.load
 
 /**
  * Created by bwo on 2014/12/15.

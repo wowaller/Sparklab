@@ -1,4 +1,4 @@
-package com.cloudera.sparkstreaming.gmcc.ps
+package com.cloudera.spark.streaming.gmcc.ps
 
 /**
  * Created by waller on 3/19/15.

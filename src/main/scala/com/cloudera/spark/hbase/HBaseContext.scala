@@ -22,7 +22,8 @@ import java.util.ArrayList
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hbase.client.{Delete, Get, HConnection, HConnectionManager, Increment, Mutation, Put, Result, Scan}
+import org.apache.hadoop.hbase.HBaseConfiguration
+import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.mapreduce.{IdentityTableMapper, TableInputFormat, TableMapReduceUtil}
 import org.apache.hadoop.mapreduce.Job
@@ -281,6 +282,24 @@ class HBaseContext(@transient sc: SparkContext,
     })
   }
 
+  def streamBulkPuts[T](dstream: DStream[T],
+                       tableName: String,
+                       f: (T) => List[Put],
+                       autoFlush: Boolean) = {
+    dstream.foreach((rdd, time) => {
+      bulkPuts(rdd, tableName, f, autoFlush)
+    })
+  }
+
+  def streamBulkPutsToTables[T](dstream: DStream[T],
+                                ft: (T) => String,
+                                f: (T) => List[Put],
+                                autoFlush: Boolean) = {
+    dstream.foreach((rdd, time) => {
+      bulkPutsToTables(rdd, ft, f, autoFlush)
+    })
+  }
+
   /**
    * A simple abstraction over the HBaseContext.foreachPartition method.
    *
@@ -306,6 +325,67 @@ class HBaseContext(@transient sc: SparkContext,
           iterator.foreach(T => htable.put(f(T)))
           htable.flushCommits()
           htable.close()
+        }))
+  }
+
+  def bulkPuts[T](rdd: RDD[T], tableName: String, f: (T) => List[Put], autoFlush: Boolean) {
+
+    rdd.foreachPartition(
+      it => hbaseForeachPartition[T](
+        broadcastedConf,
+        it,
+        (iterator, hConnection) => {
+          val htable = hConnection.getTable(tableName)
+          htable.setAutoFlush(autoFlush, true)
+          import scala.collection.JavaConversions._
+          iterator.foreach(T => htable.put(f(T)))
+          htable.flushCommits()
+          htable.close()
+        }))
+  }
+
+  def bulkPutsToTables[T](rdd: RDD[T], ft: (T) => String, f: (T) => List[Put], autoFlush: Boolean) {
+
+//    rdd.foreach(
+//      elem => hbaseForeach[T](
+//        broadcastedConf,
+//        elem,
+//        (u, hConnection) => {
+//          val htable = hConnection.getTable(ft(u))
+//          htable.setAutoFlush(autoFlush, true)
+//          f(u).foreach(p => htable.put(p))
+//          htable.flushCommits()
+//          htable.close()
+//        }))
+    rdd.foreachPartition(
+      it => hbaseForeachPartition2[T](
+        broadcastedConf,
+        it,
+        (iterator, config) => {
+          var tables : Map[String, HTable] = Map[String, HTable]()
+          var htable : HTable = null
+          var tableName = ""
+          import scala.collection.JavaConversions._
+
+          iterator.foreach(T => {
+            val name = ft(T)
+            if (!tableName.equals(name)) {
+              if (tables.contains(name)) {
+                htable = tables(name)
+              } else {
+                htable = new HTable(config, name)
+                htable.setAutoFlush(autoFlush, true)
+                tables += (name -> htable)
+              }
+              tableName = name
+            }
+            htable.put(f(T))
+          })
+
+          tables.foreach{case (name, table) => {
+            htable.flushCommits()
+            htable.close()
+          }}
         }))
   }
 
@@ -558,6 +638,37 @@ class HBaseContext(@transient sc: SparkContext,
     hConnection.close()
 
   }
+
+  private def hbaseForeachPartition2[T](
+                                        configBroadcast: Broadcast[SerializableWritable[Configuration]],
+                                        it: Iterator[T],
+                                        f: (Iterator[T], Configuration) => Unit) = {
+
+    val config = getConf(configBroadcast)
+
+
+    applyCreds(configBroadcast)
+    // specify that this is a proxy user
+//    val hConnection = HConnectionManager.createConnection(config)
+    f(it, config)
+//    hConnection.close()
+
+  }
+
+//  private def hbaseForeach[T](
+//                                configBroadcast: Broadcast[SerializableWritable[Configuration]],
+//                                elem: T,
+//                                f: (T, HConnection) => Unit) = {
+//
+//    val config = getConf(configBroadcast)
+//
+//    applyCreds(configBroadcast)
+//    // specify that this is a proxy user
+//    val hConnection = HConnectionManager.createConnection(config)
+//    f(elem, hConnection)
+//    hConnection.close()
+//
+//  }
 
   /**
    * A simple abstraction over the HBaseContext.mapPartition method.

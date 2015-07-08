@@ -1,10 +1,11 @@
-package com.cloudera.sparkstreaming.gmcc.ps
+package com.cloudera.spark.streaming.gmcc.ps
 
 import java.io.Serializable
 import java.util.Properties
 
 import com.cloudera.spark.hbase.HBaseContext
-import com.cloudera.sparkstreaming.gmcc.test.load.PropertyContext
+import com.cloudera.spark.streaming.gmcc.test.load.PropertyContext
+import PropertyContext
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client.Put

@@ -1,14 +1,14 @@
-package com.cloudera.sparkstreaming.gmcc.ps
+package com.cloudera.spark.streaming.gmcc.ps
 
 import java.io.Serializable
 
 /**
  * Created by waller on 3/19/15.
  */
-class PSNetLACRecord extends Serializable {
+class PSNetRATRecord extends Serializable {
 
   var firstTime: String = null
-  var LAC: String = null
+  var RAT: String = null
   var totalBytes: Long = 0
   var upBytes: Long = 0
   var downBytes: Long = 0
@@ -18,24 +18,24 @@ class PSNetLACRecord extends Serializable {
 
   def this(@transient in: Array[String]) = {
     this()
-    firstTime = UserServiceParseUtil.clusterTime(in(UserServiceParseUtil.FIRST_TIME))
-    LAC = in(UserServiceParseUtil.LAC)
+    firstTime = in(UserServiceParseUtil.FIRST_TIME)
+    RAT = in(UserServiceParseUtil.RAT)
     upBytes = in(UserServiceParseUtil.UP_BYTES).toLong
     downBytes = in(UserServiceParseUtil.DOWN_BYTES).toLong
     transTime = in(UserServiceParseUtil.TRANS_TIME).toDouble / 100000
   }
 
-  def reduce(other: PSNetLACRecord): PSNetLACRecord = {
-    val ret = new PSNetLACRecord(this)
+  def reduce(other: PSNetRATRecord): PSNetRATRecord = {
+    val ret = new PSNetRATRecord(this)
     ret.reduceFrom(other)
     ret
   }
 
-  def this(other: PSNetLACRecord) {
+  def this(other: PSNetRATRecord) {
     this()
     if (other == null) {
       firstTime = null
-      LAC = null
+      RAT = null
       totalBytes = 0
       upBytes = 0
       downBytes = 0
@@ -45,7 +45,7 @@ class PSNetLACRecord extends Serializable {
 
     } else {
       firstTime = other.firstTime
-      LAC = other.LAC
+      RAT = other.RAT
       totalBytes = other.totalBytes
       upBytes = other.upBytes
       downBytes = other.downBytes
@@ -56,7 +56,7 @@ class PSNetLACRecord extends Serializable {
 
   }
 
-  def reduceFrom(other: PSNetLACRecord): Unit = {
+  def reduceFrom(other: PSNetRATRecord): Unit = {
     this.upBytes += other.upBytes
     this.downBytes += other.downBytes
     this.transTime += other.transTime
@@ -68,17 +68,9 @@ class PSNetLACRecord extends Serializable {
     this.totalBytes = upBytes + downBytes
   }
 
-  def getKey(): String = {
-    val sb: StringBuilder = new StringBuilder
-    sb.append(firstTime).append("_").append(LAC)
-    sb.toString()
-  }
-
-
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder
-    sb.append(firstTime).append(",").append(LAC).append(",").append(upBytes.toString).append(",")
-      .append(downBytes.toString).append(",").append(transTime.toString)
+    sb.append(firstTime).append(",").append(upBytes.toString).append(",").append(downBytes.toString).append(",").append(transTime.toString)
       .append(",").append(avgDownSpeed).append(",").append(avgUpSpeed)
     sb.toString()
   }
