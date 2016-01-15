@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.cloudera.graph.pageRank
+package com.cloudera.spark.graph.pageRank
 
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
@@ -87,7 +87,8 @@ object PageRank extends Logging {
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
-      .mapVertices( (id, attr) => resetProb )
+//      .mapVertices( (id, attr) => resetProb )
+      .mapVertices( (id, attr) => 1 )
 
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null

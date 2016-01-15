@@ -6,7 +6,7 @@ import java.util.{Calendar, Properties}
 
 import com.cloudera.spark.hbase.HBaseContext
 import com.cloudera.spark.streaming.ParseException
-import com.cloudera.streaming.parser.GeneralHBaseJsonParser
+import com.cloudera.spark.streaming.parser.GeneralHBaseJsonParser
 import kafka.serializer.StringDecoder
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration

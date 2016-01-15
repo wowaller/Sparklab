@@ -1,4 +1,4 @@
-package com.cloudera.graph.kshell
+package com.cloudera.spark.graph.kshell
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._

@@ -1,4 +1,4 @@
-package com.cloudera.graph.kshell;
+package com.cloudera.spark.graph.kshell;
 
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;

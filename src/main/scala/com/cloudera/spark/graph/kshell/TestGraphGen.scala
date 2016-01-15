@@ -1,4 +1,4 @@
-package com.cloudera.graph.kshell
+package com.cloudera.spark.graph.kshell
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkContext, SparkConf}
