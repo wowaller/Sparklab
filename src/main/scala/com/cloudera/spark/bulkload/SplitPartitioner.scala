@@ -25,29 +25,50 @@ class SplitPartitioner(splits: List[Array[Byte]]) extends Partitioner {
   }
 
   def getPartition(key: Array[Byte]): Int = {
-    if (compareBytes(key, splits(numPartitions - 1)) >= 0) {
-      numPartitions - 1
-    } else {
+//    if (compareBytes(key, splits(numPartitions - 1)) >= 0) {
+//      numPartitions - 1
+//    } else {
       getPartition(key, 0, numPartitions)
-    }
+//    }
   }
 
   def getPartition(key: Array[Byte], from: Int, to: Int): Int = {
-    if ((to - from) <= 1) {
-      return from
+    var low = from
+    var high = to
+
+    while (low <= high - 1) {
+      var mid = (low + high) >>> 1
+//      var midVal = a[mid];
+      var cmp = compareBytes(key, splits(mid))
+      if (cmp < 0)
+        low = mid
+      else if (cmp > 0)
+        high = mid
+      else
+        return mid // key found
     }
-    val mid = (from + to) / 2
-    val diff = compareBytes(key, splits(mid))
-    if (diff > 0) {
-      getPartition(key, mid, to)
-    } else if (diff < 0) {
-      getPartition(key, from, mid)
-    } else {
-      mid
-    }
+    return low  // key not found.
+//    if ((to - from) <= 1) {
+//      return from
+//    }
+//    val mid = (from + to) >>> 1
+//    val diff = compareBytes(key, splits(mid))
+//    if (diff > 0) {
+//      getPartition(key, mid, to)
+//    } else if (diff < 0) {
+//      getPartition(key, from, mid)
+//    } else {
+//      mid
+//    }
   }
+
+
 
   def compareBytes(a: Array[Byte], b: Array[Byte]): Int = {
     WritableComparator.compareBytes(a, 0, a.length, b, 0, b.length)
   }
+}
+
+class TrieNode(level: Int) {
+
 }

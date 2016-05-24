@@ -4,7 +4,7 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.util
 
-import com.cloudera.spark.bulkload.serializable.{BytesSerializer, BytesSerializable}
+import com.cloudera.spark.bulkload.serializable.{CompactBuffer, BytesSerializer, BytesSerializable}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client.{HTable, Put, RegionLocator, Table}
@@ -15,7 +15,6 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.{InputFormat, MRJobConfig}
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
-import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.{Aggregator, Logging, Partitioner, SparkContext}
 
 import scala.collection.mutable
@@ -46,10 +45,10 @@ object BulkLoadUtil extends Logging {
   (sc: SparkContext, conf: Configuration,
    path: String, parser: Parser[(K, V), Put])
   (implicit kct: ClassTag[K], vct: ClassTag[V], fct: ClassTag[F]): RDD[Put] = {
-    sc.newAPIHadoopFile(path)(kct, vct, fct).map { case (k: K, v: V) => {
-      //      (k.toString + v.toString)
-      parser.parse((k, v))
-    }
+      sc.newAPIHadoopFile(path)(kct, vct, fct).map { case (k: K, v: V) => {
+        //      (k.toString + v.toString)
+        parser.parse((k, v))
+      }
     }
 
   }
@@ -60,16 +59,7 @@ object BulkLoadUtil extends Logging {
     configureIncrementalLoad(conf, table, table, path)
 
     val p: Partitioner = new SplitPartitioner(getRegionStartKeys(table))
-//    implicit val bytesWritableOrding = new Ordering[Array[Byte]] {
-//      override def compare(a: Array[Byte], b: Array[Byte]) = WritableComparator.compareBytes(a, 0, a.length, b, 0, b.length)
-//    }
-//    implicit val StringOrding = new Ordering[String] {
-//      override def compare(a: String, b: String) = {
-//        val aBytes = a.getBytes()
-//        val bBytes = b.getBytes()
-//        WritableComparator.compareBytes(aBytes, 0, aBytes.length, bBytes, 0, bBytes.length)
-//      }
-//    }
+
     implicit val BytesSerializableOrding = new Ordering[BytesSerializable] {
       override def compare(a: BytesSerializable, b: BytesSerializable) = {
         val aBytes = a.getBytes()
@@ -78,74 +68,33 @@ object BulkLoadUtil extends Logging {
       }
     }
 
-    val createCombiner = (v: Array[Byte]) => mutable.MutableList(v)
-    val mergeValue = (buf: mutable.MutableList[Array[Byte]], v: Array[Byte]) => buf += v
-    val mergeCombiners = (c1: mutable.MutableList[Array[Byte]], c2: mutable.MutableList[Array[Byte]]) => c1 ++= c2
-    val aggregator = new Aggregator[BytesSerializable, Array[Byte], mutable.MutableList[Array[Byte]]](
+    val createCombiner = (v: Array[Byte]) => CompactBuffer[Array[Byte]](v)
+    val mergeValue = (buf: CompactBuffer[Array[Byte]], v: Array[Byte]) => buf += v
+    val mergeCombiners = (c1: CompactBuffer[Array[Byte]], c2: CompactBuffer[Array[Byte]]) => c1 ++= c2
+    val aggregator = new Aggregator[BytesSerializable, Array[Byte], CompactBuffer[Array[Byte]]](
       createCombiner,
       mergeValue,
       mergeCombiners)
 
-    val shuffledPuts = new ShuffledRDD[BytesSerializable, Array[Byte], mutable.MutableList[Array[Byte]]](
+    val shuffledPuts = new ShuffledRDD[BytesSerializable, Array[Byte], CompactBuffer[Array[Byte]]](
       puts.flatMap(put => putToBytes(put).map{
         case (key, value) => (new BytesSerializable(key), value)
       }), p)
       .setAggregator(aggregator)
-      .setMapSideCombine(false)
+      .setMapSideCombine(true)
       .setKeyOrdering(BytesSerializableOrding)
 
-//    shuffledPuts.flatMapValues(kvs => sortKeyValue(kvs.map(kv => new KeyValue(kv))))
-//      .map {
-//        case (row, value) => (new ImmutableBytesWritable(row), value)
-//      }
-//      .saveAsNewAPIHadoopDataset(conf)
-
-
-
-    val c1 = shuffledPuts.mapPartitions({
-        iter: Iterator[(BytesSerializable, Iterable[Array[Byte]])] => {
-          for (i <- iter) yield {
-            sortKeyValue(i._2.map(kv => new KeyValue(kv))).iterator.map(u => (new ImmutableBytesWritable(i._1.getBytes()), u))
-          }
-        } }, preservesPartitioning = true)
-      .flatMap(_.map{
-        case (key, value) => (key, value)
-      })
-//      .count
+    val c1 = shuffledPuts.flatMap {
+        case (key, values) => {
+          sortKeyValue(values.map(kv => new KeyValue(kv))).map(u => (new ImmutableBytesWritable(key.getBytes()), u))
+        }
+      }
       .saveAsNewAPIHadoopDataset(conf)
 
 //    val c2 = puts.map(put => (new String(put.getRow), put.getRow)).groupByKey().count()
 //    println("====================================")
 //    println(c1)
 
-//      .collect.foreach(u => println(u._1 + "," + u._2))
-//      .saveAsNewAPIHadoopDataset(conf)
-//
-//    puts.flatMap(put => putToBytes(put))
-//      .groupByKey(p)
-//      .mapValues(kvs => sortKeyValue(kvs.map(kv => new KeyValue(kv))))
-//      .mapPartitions()
-//      .flat
-//          .flatMap {
-//            case (row, cells) => reduceCellBytes(row, cells)
-//          }
-//          .repartitionAndSortWithinPartitions(p)
-//          .map {
-//            case (row, value) => (new ImmutableBytesWritable(row), new KeyValue(value))
-//          }
-//          .saveAsNewAPIHadoopDataset(conf)
-
-
-//    puts.flatMap(put => putToBytes(put))
-//      .groupByKey(p)
-//      .flatMap {
-//        case (row, cells) => reduceCellBytes(row, cells)
-//      }
-//      .repartitionAndSortWithinPartitions(p)
-//      .map {
-//        case (row, value) => (new ImmutableBytesWritable(row), new KeyValue(value))
-//      }
-//      .saveAsNewAPIHadoopDataset(conf)
   }
 
   @throws(classOf[IOException])
@@ -167,31 +116,31 @@ object BulkLoadUtil extends Logging {
     logInfo("Incremental table " + table.getName + " output configured.")
   }
 
-  @throws(classOf[IOException])
-  @throws(classOf[InterruptedException])
-  def reduce(row: Array[Byte], puts: Iterable[Put]): Iterable[(Array[Byte], Cell)] = {
-    val iter: Iterator[Put] = puts.iterator
-    val ret: mutable.MutableList[(Array[Byte], Cell)] = mutable.MutableList()
-    import scala.collection.JavaConversions._
-    if (iter.hasNext) {
-      val map: util.TreeSet[KeyValue] = new util.TreeSet[KeyValue](KeyValue.COMPARATOR)
-      while (iter.hasNext) {
-        val p: Put = iter.next
-
-        for (cells <- p.getFamilyCellMap.values) {
-          for (cell <- cells) {
-            val kv: KeyValue = KeyValueUtil.ensureKeyValue(cell)
-            map.add(kv)
-          }
-        }
-      }
-
-      for (kv <- map) {
-        ret.+=((row, kv))
-      }
-    }
-    ret
-  }
+//  @throws(classOf[IOException])
+//  @throws(classOf[InterruptedException])
+//  def reduce(row: Array[Byte], puts: Iterable[Put]): Iterable[(Array[Byte], Cell)] = {
+//    val iter: Iterator[Put] = puts.iterator
+//    val ret: mutable.MutableList[(Array[Byte], Cell)] = mutable.MutableList()
+//    import scala.collection.JavaConversions._
+//    if (iter.hasNext) {
+//      val map: util.TreeSet[KeyValue] = new util.TreeSet[KeyValue](KeyValue.COMPARATOR)
+//      while (iter.hasNext) {
+//        val p: Put = iter.next
+//
+//        for (cells <- p.getFamilyCellMap.values) {
+//          for (cell <- cells) {
+//            val kv: KeyValue = KeyValueUtil.ensureKeyValue(cell)
+//            map.add(kv)
+//          }
+//        }
+//      }
+//
+//      for (kv <- map) {
+//        ret.+=((row, kv))
+//      }
+//    }
+//    ret
+//  }
 
   @throws(classOf[IOException])
   @throws(classOf[InterruptedException])
@@ -207,24 +156,24 @@ object BulkLoadUtil extends Logging {
     ret
   }
 
-  @throws(classOf[IOException])
-  @throws(classOf[InterruptedException])
-  def reduceCellBytes(row: Array[Byte], cells: Iterable[Array[Byte]]): Iterable[(Array[Byte], Array[Byte])] = {
-    val iter: Iterator[Array[Byte]] = cells.iterator
-    val ret: mutable.MutableList[(Array[Byte], Array[Byte])] = mutable.MutableList()
-    import scala.collection.JavaConversions._
-    if (!iter.isEmpty) {
-      val map: util.TreeSet[Array[Byte]] = new util.TreeSet[Array[Byte]](Bytes.BYTES_COMPARATOR)
-      for (cell <- iter) {
-        map.add(cell)
-      }
-
-      for (kv <- map) {
-        ret.+=((row, kv))
-      }
-    }
-    ret
-  }
+//  @throws(classOf[IOException])
+//  @throws(classOf[InterruptedException])
+//  def reduceCellBytes(row: Array[Byte], cells: Iterable[Array[Byte]]): Iterable[(Array[Byte], Array[Byte])] = {
+//    val iter: Iterator[Array[Byte]] = cells.iterator
+//    val ret: mutable.MutableList[(Array[Byte], Array[Byte])] = mutable.MutableList()
+//    import scala.collection.JavaConversions._
+//    if (!iter.isEmpty) {
+//      val map: util.TreeSet[Array[Byte]] = new util.TreeSet[Array[Byte]](Bytes.BYTES_COMPARATOR)
+//      for (cell <- iter) {
+//        map.add(cell)
+//      }
+//
+//      for (kv <- map) {
+//        ret.+=((row, kv))
+//      }
+//    }
+//    ret
+//  }
 
   @throws(classOf[IOException])
   @throws(classOf[InterruptedException])
@@ -274,7 +223,7 @@ object BulkLoadUtil extends Logging {
     import scala.collection.JavaConversions._
     for (familyDescriptor <- families) {
       if (({
-        i += 1;
+        i += 1
         i - 1
       }) > 0) {
         blockSizeConfigValue.append('&')
@@ -307,7 +256,7 @@ object BulkLoadUtil extends Logging {
     import scala.collection.JavaConversions._
     for (familyDescriptor <- families) {
       if (({
-        i += 1;
+        i += 1
         i - 1
       }) > 0) {
         bloomTypeConfigValue.append('&')
@@ -344,7 +293,7 @@ object BulkLoadUtil extends Logging {
     import scala.collection.JavaConversions._
     for (familyDescriptor <- families) {
       if (({
-        i += 1;
+        i += 1
         i - 1
       }) > 0) {
         compressionConfigValue.append('&')
@@ -377,7 +326,7 @@ object BulkLoadUtil extends Logging {
     import scala.collection.JavaConversions._
     for (familyDescriptor <- families) {
       if (({
-        i += 1;
+        i += 1
         i - 1
       }) > 0) {
         dataBlockEncodingConfigValue.append('&')
